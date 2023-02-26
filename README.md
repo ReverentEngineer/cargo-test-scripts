@@ -1,6 +1,7 @@
 # cargo-test-scripts
 
-Run test scripts based off metadata descriptions in Cargot.toml
+Run test scripts based off metadata descriptions in Cargot.toml and writes
+the results in JUnit format.
 
 Example entries:
 

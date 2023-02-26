@@ -1,5 +1,6 @@
 //! Main entrypoint
 use std::{
+    fs::File,
     io::Read,
     process::{
         Command,
@@ -141,9 +142,15 @@ impl TestSuite {
 
 
 fn main() {
-    let config= std::fs::read_to_string("Cargo.toml")
+    let matches = clap::Command::new("cargo-test-scripts")
+        .bin_name("cargo-test-scripts")
+        .arg(clap::Arg::new("manifest").long("manifest-path").default_value("Cargo.toml"))
+        .arg(clap::Arg::new("output").long("output").short('o'))
+        .get_matches();
+
+    let config = std::fs::read_to_string(matches.get_one::<String>("manifest").unwrap())
         .unwrap_or_else(|err| {
-            eprintln!("Unable to read Cargo.toml: {err}");
+            eprintln!("Unable to read manifest: {err}");
             std::process::exit(-1);
         });
 
@@ -155,10 +162,19 @@ fn main() {
 
     let report = test_suite.run();
 
-    serde_xml_rs::to_writer(std::io::stdout(), &report)
-        .unwrap_or_else(|err| {
-            eprintln!("Unable to write report: {err}");
-            std::process::exit(-1);
-        });
+    if let Some(output) = matches.get_one::<String>("output") {
+        let output = File::options().create(true).truncate(true).write(true).open(output)
+            .unwrap_or_else(|err| {
+                eprintln!("Unable to create outputfile: {err}");
+                std::process::exit(-1);
+            });
+        serde_xml_rs::to_writer(output, &report)
+    } else {
+        serde_xml_rs::to_writer(std::io::stdout(), &report)
+    }
+    .unwrap_or_else(|err| {
+        eprintln!("Unable to write report: {err}");
+        std::process::exit(-1);
+    });
 
 }
