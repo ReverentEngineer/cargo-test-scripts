@@ -5,7 +5,7 @@ the results in JUnit format.
 
 Example entries:
 
-```toml`
+```toml
 [[package.metadata.test-script]]
 name = "test-something"
 timeout = 1000 # Timeout in milliseconds
