@@ -7,6 +7,7 @@ repository = "https://github.com/ReverentEngineer/cargo-test-scripts"
 version = "1.0.0"
 edition = "2021"
 readme = "README.md"
+keywords = ["test", "junit"]
 
 [dependencies]
 chrono = "0.4"
