@@ -1,0 +1,11 @@
+[[package.metadata.test-script]]
+name = "my-test" 
+timeout = 1000
+script = [
+	"bash -c 'echo hello && false'"
+]
+[[package.metadata.test-script]]
+name = "my-test3"
+script = [
+	"echo hello hi"
+]

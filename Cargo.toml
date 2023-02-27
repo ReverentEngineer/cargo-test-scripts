@@ -1,19 +1,11 @@
 [package]
+description = "A JUnit compatible test script driver"
+authors = ["Jeff Caffrey-Hill <jeff@caffreyhill.com>"]
+license = "MIT"
 name = "cargo-test-scripts"
-version = "0.1.0"
+repository = "https://github.com/ReverentEngineer/cargo-test-scripts"
+version = "1.0.0"
 edition = "2021"
-
-[[package.metadata.test-script]]
-name = "my-test" 
-timeout = 1000
-script = [
-	"bash -c 'echo hello && false'"
-]
-[[package.metadata.test-script]]
-name = "my-test3"
-script = [
-	"echo hello hi"
-]
 
 [dependencies]
 chrono = "0.4"

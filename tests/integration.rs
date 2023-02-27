@@ -9,6 +9,8 @@ use git2::Repository;
 #[test]
 fn validate_xml() {
    let output = Command::new(env!("CARGO_BIN_EXE_cargo-test-scripts"))
+       .arg("--manifest-path")
+       .arg(format!("{0}/tests/Cargo.toml", env!("CARGO_MANIFEST_DIR")))
        .stdout(Stdio::piped())
        .output()
        .expect("Failed to run");
