@@ -16,11 +16,13 @@ script = [
 ]
 
 [dependencies]
+chrono = "0.4"
 clap = "4"
+gethostname = "0.4"
 serde = { version = "1", default-features = false, features = ["derive"] }
-serde-xml-rs = "0.6.0"
+serde-xml-rs = "0.6"
 toml = { version = "0", default-features = false, features = ["parse"] }
-xshell = "0.2.3"
+xshell = "0.2"
 
 [dev-dependencies]
-git2 = "0.16.1"
+git2 = "0.16"

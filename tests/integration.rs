@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::io::Write;
 use std::process::{
     Command,
@@ -16,9 +17,12 @@ fn validate_xml() {
 
     let schema_repo_workspace = format!("{tmpdir}/JUnit-Schema");
 
-    std::fs::remove_dir_all(&schema_repo_workspace).expect("Failed to remove");
-    Repository::clone("https://github.com/windyroad/JUnit-Schema.git", 
-        &schema_repo_workspace).expect("Failed to clone");
+    let path = Path::new(&schema_repo_workspace);
+
+    if !path.exists() {
+        Repository::clone("https://github.com/windyroad/JUnit-Schema.git", 
+            &schema_repo_workspace).expect("Failed to clone");
+    }
     
     let mut xmllint = Command::new("xmllint")
         .arg("--schema")

@@ -8,42 +8,89 @@ use std::{
     },
     time::{
         Duration,
-        Instant
+        Instant,
+        SystemTime
     }
 };
 use serde::{Deserialize, Serialize};
 
+mod ser;
 mod de;
 
 /// Test report information
-#[derive(Serialize)]
 struct TestReport<'a> {
 
     /// Name of the test
-    #[serde(rename(serialize = "@name"))]
     name: &'a str,
 
     /// Time elapsed during test
-    #[serde(rename(serialize = "@time"))]
-    time: f64,
+    time: Duration,
 
     /// Result of test
-    #[serde(rename = "$value")]
-    result: Vec<TestResult>
+    result: Option<Error>
+}
+
+impl<'a> TestReport<'a> {
+
+    fn failed(&self) -> bool {
+        match self.result {
+            Some(Error::Failure(_)) => true,
+            _ => false
+        }
+    }
+
+    fn error(&self) -> bool {
+        match self.result {
+            Some(Error::Error(_)) => true,
+            _ => false
+        }
+    }
 }
 
 /// Suite of tests
-#[derive(Serialize)]
-#[serde(rename(serialize = "testsuite"))]
 struct TestSuiteReport<'a> {
-    #[serde(rename = "$value")]
-    tests: Vec<TestCase<'a>>
+
+    timestamp: SystemTime, 
+
+    time: Duration,
+
+    contents: Vec<TestSuiteContent<'a>>
+
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "snake_case")]
-enum TestResult {
-    Failure(String)
+impl<'a> TestSuiteReport<'a> {
+
+    fn tests(&self) -> usize {
+        self.contents.iter().filter(|&test| {
+            match test {
+                TestSuiteContent::Testcase(_report) => true,
+                _ => false
+            }
+        }).count()
+    }
+
+    fn failures(&self) -> usize {
+        self.contents.iter().filter(|&test| {
+            match test {
+                TestSuiteContent::Testcase(report) if report.failed() => true,
+                _ => false
+            }
+        }).count()
+    }
+
+    fn errors(&self) -> usize {
+        self.contents.iter().filter(|&test| {
+            match test {
+                TestSuiteContent::Testcase(report) if report.error() => true,
+                _ => false
+            }
+        }).count()
+    }
+}
+
+enum Error {
+    Failure(String),
+    Error(String)
 }
 
 /// A test definition
@@ -60,40 +107,47 @@ struct TestSpec {
 
 }
 
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Self {
+        Self::Error(format!("{err}").trim_end().to_string())
+    }
+}
 
-fn run_step(command: &str, test_start: &Instant, timeout: &Option<Duration>) -> Result<(), String> {
+impl From<std::process::ChildStderr> for Error {
+    fn from(mut stderr: std::process::ChildStderr) -> Self {
+        let mut message = String::new();
+        if let Err(message) = stderr.read_to_string(&mut message) {
+            Self::Error(format!("{message}").trim_end().to_string())
+        } else {
+            Self::Error(message)
+        }
+    }
+}
+
+fn run_step(command: &str, test_start: &Instant, timeout: &Option<Duration>) -> Result<(), Error> {
     let args: Vec<_> = command.split_whitespace().collect();
-    let child = Command::new(args[0])
+    let mut child = Command::new(args[0])
         .args(&args[1..])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .spawn();
-    match (child, *timeout) {
-        (Ok(mut child), Some(timeout)) => {
+        .spawn()?;
+    match *timeout {
+        Some(timeout) => {
             while test_start.elapsed() < timeout {
-                match child.try_wait() {
-                    Ok(None) => (),
-                    Ok(Some(status)) if status.success() => return Ok(()),
-                    Ok(Some(_)) => {
-                        let mut stderr = String::new();
-                        child.stderr.expect("Failed to get stderr")
-                            .read_to_string(&mut stderr)
-                            .expect("Failed to read to string");
-                        return Err(stderr.trim_end().to_string())
-                    },
-                    Err(err) => return Err(format!("{err}"))
+                match child.try_wait()? {
+                    None => (),
+                    Some(status) if status.success() => return Ok(()),
+                    Some(_) => return Err(child.stderr.expect("Failed to get stderr").into()),
                 };
             }
-            Err(format!("Timed out"))
+            Err(Error::Error(format!("Timed out")))
         },
-        (Ok(child), None) => {
-            match child.wait_with_output() {
-                Ok(output) if output.status.success() => Ok(()),
-                Ok(output) => Err(String::from_utf8_lossy(&output.stderr).trim_end().to_string()),
-                Err(err) => Err(format!("{err}"))
+        None => {
+            match child.wait_with_output()? {
+                output if output.status.success() => Ok(()),
+                output => Err(Error::Failure(String::from_utf8_lossy(&output.stderr).trim_end().to_string())),
             } 
         },
-        (Err(err), _) => Err(format!("{err}")) 
     }
 }
 
@@ -101,26 +155,31 @@ impl TestSpec {
 
     fn run<'a>(&'a self) -> TestReport<'a> {
         let start = Instant::now();
-        let mut results= Vec::new();
         for command in &self.script {
-            if let Err(err) = run_step(&command, &start, &self.timeout) {
-                results.push(TestResult::Failure(err));
-                break;
-            }
+            if let Err(result) = run_step(command, &start, &self.timeout) {
+                return TestReport {
+                    name: &self.name,
+                    time: start.elapsed(),
+                    result: Some(result)
+                }
+            };
         }
         TestReport {
             name: &self.name,
-            time: start.elapsed().as_secs_f64(),
-            result: results
+            time: start.elapsed(),
+            result: None
         }
     }
 
 }
 
 #[derive(Serialize)]
-#[serde(rename_all = "lowercase")]
-enum TestCase<'a> {
-    TestCase(TestReport<'a>)
+#[serde(rename_all = "kebab-case")]
+enum TestSuiteContent<'a> {
+    Properties,
+    Testcase(TestReport<'a>),
+    SystemOut(String),
+    SystemErr(String)
 }
 
 /// Suite of tests
@@ -131,10 +190,17 @@ struct TestSuite {
 impl TestSuite {
 
     fn run<'a>(&'a self) -> TestSuiteReport<'a> {
-        let tests = self.tests.iter()
-            .map(|test| TestCase::TestCase(test.run())).collect();
-        TestSuiteReport { 
-            tests
+        let timestamp = SystemTime::now();
+        let start = Instant::now();
+        let mut contents = self.tests.iter()
+            .map(|test| TestSuiteContent::Testcase(test.run())).collect::<Vec<_>>();
+        contents.insert(0, TestSuiteContent::Properties);
+        contents.push(TestSuiteContent::SystemOut(String::new()));
+        contents.push(TestSuiteContent::SystemErr(String::new()));
+        TestSuiteReport {
+            timestamp,
+            time: start.elapsed(),
+            contents
         }
     }
 
